@@ -5,6 +5,7 @@ import { DashboardHeader } from "@/components/DashboardHeader";
 import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { StatCard } from "@/components/StatCard";
+import { ChatAssistant } from "@/components/ChatAssistant";
 import { Card } from "@/components/ui/card";
 import { fetchDevices, fetchVisitors } from "@/services/api";
 import { calculateStats } from "@/utils/statsCalculator";
@@ -29,6 +30,7 @@ const Index = () => {
   const [selectedDevice, setSelectedDevice] = useState("all");
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [appliedFilters, setAppliedFilters] = useState({
     device: "all",
     start: today,
@@ -89,10 +91,10 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <DashboardSidebar />
+      <DashboardSidebar isOpen={sidebarOpen} />
       
       <div className="flex-1">
-        <DashboardHeader />
+        <DashboardHeader onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
         
         <main className="p-6">
           <DashboardFilters
@@ -262,6 +264,8 @@ const Index = () => {
           )}
         </main>
       </div>
+      
+      <ChatAssistant />
     </div>
   );
 };

@@ -1,11 +1,23 @@
-import { LogOut } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 import { Button } from "./ui/button";
 
-export const DashboardHeader = () => {
+interface DashboardHeaderProps {
+  onToggleSidebar: () => void;
+}
+
+export const DashboardHeader = ({ onToggleSidebar }: DashboardHeaderProps) => {
   return (
     <header className="bg-primary text-primary-foreground shadow-md">
       <div className="px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggleSidebar}
+            className="text-white hover:bg-white/10"
+          >
+            <Menu className="w-6 h-6" />
+          </Button>
           <div className="w-12 h-12 bg-white rounded-md flex items-center justify-center">
             <span className="text-primary font-bold text-lg">A</span>
           </div>

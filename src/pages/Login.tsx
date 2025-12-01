@@ -39,8 +39,8 @@ const Login = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-primary/5 flex items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto w-20 h-20 bg-primary rounded-xl flex items-center justify-center shadow-md">
-            <span className="text-primary-foreground font-bold text-3xl">A</span>
+          <div className="mx-auto w-20 h-20 rounded-xl flex items-center justify-center shadow-md overflow-hidden bg-white">
+            <img src="/logo.png" alt="Assaí Logo" className="w-full h-full object-contain p-1" />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold">Assaí Atacadista</CardTitle>

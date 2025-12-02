@@ -7,8 +7,8 @@ import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { ChatAssistant } from "@/components/ChatAssistant";
 import { DashboardFilters } from "@/components/DashboardFilters";
 import { toast } from "@/components/ui/use-toast";
-import { fetchVisitors, fetchDevices } from "@/services/api";
-import { Device, Visitor } from "@/types/api";
+import { fetchDevices } from "@/services/api";
+import { Device, VisitorStats } from "@/types/api";
 import { 
   Table, 
   TableBody, 
@@ -22,7 +22,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { calculateStats } from "@/utils/statsCalculator";
 import backend from "@/services/backend";
 
 const Lista = () => {
@@ -38,25 +37,15 @@ const Lista = () => {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [backendAvailable, setBackendAvailable] = useState(false);
 
   const { data: devices = [], error: devicesError } = useQuery<Device[]>({
     queryKey: ["devices"],
     queryFn: fetchDevices,
   });
 
-  const { data: visitors = [], isLoading, error: visitorsError } = useQuery<Visitor[]>({
-    queryKey: ["visitors", appliedFilters],
-    queryFn: () =>
-      fetchVisitors(
-        appliedFilters.device === "all" ? undefined : appliedFilters.device,
-        appliedFilters.start,
-        appliedFilters.end
-      ),
-  });
-
-  const { data: backendPage, isLoading: isBackendLoading, error: backendPageError } = useQuery({
-    queryKey: ["backendVisitors", appliedFilters, page, pageSize],
+  // Busca visitantes direto do banco via backend
+  const { data: visitorsPage, isLoading, error: visitorsError } = useQuery({
+    queryKey: ["visitors", appliedFilters, page, pageSize],
     queryFn: () =>
       backend.fetchVisitorsPage(
         appliedFilters.device === "all" ? undefined : appliedFilters.device,
@@ -65,27 +54,27 @@ const Lista = () => {
         page,
         pageSize
       ),
-    enabled: backendAvailable,
+    staleTime: 60 * 1000,
   });
 
-  const stats = calculateStats(visitors);
+  // Busca stats para o chat
+  const { data: stats } = useQuery<VisitorStats>({
+    queryKey: ["stats", appliedFilters.device, appliedFilters.start, appliedFilters.end],
+    queryFn: () =>
+      backend.fetchVisitorStats(
+        appliedFilters.device === "all" ? undefined : appliedFilters.device,
+        appliedFilters.start,
+        appliedFilters.end
+      ),
+  });
 
   useEffect(() => {
     if (devicesError) toast({ title: "Erro ao buscar lojas", description: String(devicesError) });
   }, [devicesError]);
 
   useEffect(() => {
-    if (visitorsError) toast({ title: "Erro ao buscar visitantes", description: String(visitorsError) });
+    if (visitorsError) toast({ title: "Erro ao carregar visitantes", description: String(visitorsError), variant: "destructive" });
   }, [visitorsError]);
-
-  useEffect(() => {
-    if (backendPageError) {
-      const msg = String(backendPageError);
-      if (!/Failed to fetch/i.test(msg)) {
-        toast({ title: "Erro ao buscar visitantes do backend", description: msg });
-      }
-    }
-  }, [backendPageError]);
 
   const handleApplyFilters = () => {
     setAppliedFilters({
@@ -93,6 +82,7 @@ const Lista = () => {
       start: startDate,
       end: endDate,
     });
+    setPage(1);
   };
 
   useEffect(() => {
@@ -100,49 +90,17 @@ const Lista = () => {
     setPage(1);
   }, [selectedDevice, startDate, endDate]);
 
-  useEffect(() => {
-    setSelectedDevice("all");
-    setStartDate(todayStr);
-    setEndDate(todayStr);
-    setAppliedFilters({ device: "all", start: todayStr, end: todayStr });
-  }, []);
-
-  useEffect(() => {
-    const tp = Math.max(1, Math.ceil(visitors.length / pageSize));
-    if (page > tp) setPage(tp);
-  }, [visitors, pageSize, page]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const url = `http://localhost:3001/api/visitors/list?start=${appliedFilters.start}&end=${appliedFilters.end}&page=1&pageSize=1`;
-    fetch(url, { signal: controller.signal })
-      .then((r) => setBackendAvailable(r.ok))
-      .catch(() => setBackendAvailable(false));
-    return () => controller.abort();
-  }, [appliedFilters]);
-
-  const getDeviceName = (deviceId: string) => {
-    const device = devices.find((d) => d.id === deviceId);
-    return device?.name || deviceId;
+  const getDeviceName = (storeId: string) => {
+    const device = devices.find((d) => d.id === storeId);
+    return device?.name || storeId;
   };
 
-  const backendItems =
-    backendPage?.items?.map((i) => ({
-      id: i.visitor_id,
-      gender: i.gender,
-      age: i.age,
-      timestamp: i.timestamp,
-      deviceId: i.store_id,
-      dayOfWeek: i.day_of_week,
-      smile: i.smile,
-    })) ?? [];
-
-  const totalCount = backendPage?.total ?? visitors.length;
+  const visitors = visitorsPage?.items || [];
+  const totalCount = visitorsPage?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const startIndex = (currentPage - 1) * pageSize;
-  const paginatedVisitors = visitors.slice(startIndex, startIndex + pageSize);
-  const displayVisitors = backendItems.length > 0 ? backendItems : paginatedVisitors;
+
+  const defaultStats: VisitorStats = { total: 0, men: 0, women: 0, averageAge: 0, byDayOfWeek: {}, byAgeGroup: {}, byHour: {}, byGenderHour: { male: {}, female: {} } };
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -184,7 +142,7 @@ const Lista = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(isLoading || isBackendLoading) ? (
+                  {isLoading ? (
                     Array.from({ length: 10 }).map((_, i) => (
                       <TableRow key={i}>
                         <TableCell><Skeleton className="h-4 w-32" /></TableCell>
@@ -195,28 +153,26 @@ const Lista = () => {
                         <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                       </TableRow>
                     ))
-                  ) : displayVisitors.length === 0 ? (
+                  ) : visitors.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                         Nenhum visitante encontrado no período selecionado
                       </TableCell>
                     </TableRow>
                   ) : (
-                    displayVisitors.map((visitor) => (
-                      <TableRow key={visitor.id}>
+                    visitors.map((visitor) => (
+                      <TableRow key={`${visitor.visitor_id}-${visitor.timestamp}`}>
                         <TableCell className="font-medium">
                           {format(new Date(visitor.timestamp), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                         </TableCell>
-                        <TableCell>{getDeviceName(visitor.deviceId)}</TableCell>
+                        <TableCell>{visitor.store_name || getDeviceName(visitor.store_id)}</TableCell>
                         <TableCell>
                           <Badge variant={visitor.gender === "M" ? "default" : "secondary"}>
                             {visitor.gender === "M" ? "Masculino" : "Feminino"}
                           </Badge>
                         </TableCell>
                         <TableCell>{visitor.age} anos</TableCell>
-                        <TableCell className="capitalize">
-                          {visitor.dayOfWeek || format(new Date(visitor.timestamp), "EEEE", { locale: ptBR })}
-                        </TableCell>
+                        <TableCell className="capitalize">{visitor.day_of_week}</TableCell>
                         <TableCell>
                           <Badge variant={visitor.smile ? "default" : "secondary"}>
                             {visitor.smile ? "Sim" : "Não"}
@@ -228,7 +184,7 @@ const Lista = () => {
                 </TableBody>
               </Table>
             </div>
-            {!(isLoading || isBackendLoading) && totalCount > 0 && (
+            {!isLoading && totalCount > 0 && (
               <div className="p-4 border-t bg-muted/30 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <p className="text-sm text-muted-foreground">
                   Total de visitantes: <span className="font-semibold text-foreground">{totalCount}</span>
@@ -266,7 +222,7 @@ const Lista = () => {
         </main>
       </div>
       
-      <ChatAssistant visitors={visitors} devices={devices} stats={stats} />
+      <ChatAssistant visitors={[]} devices={devices} stats={stats || defaultStats} />
     </div>
   );
 };

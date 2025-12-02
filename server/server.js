@@ -386,14 +386,15 @@ app.get("/api/visitors/list", async (req, res) => {
     params.push(start);
     params.push(end);
     where.push("timestamp::date BETWEEN $1 AND $2");
-    if (deviceId) { params.push(String(deviceId)); where.push(`store_id = ${params.length}`); }
+    if (deviceId) { params.push(String(deviceId)); where.push(`store_id = $${params.length}`); }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     const { rows: cRows } = await pool.query(`SELECT COUNT(*)::int AS total FROM public.visitors ${whereSql}`, params);
     const total = cRows[0]?.total ?? 0;
     const offset = (p - 1) * ps;
-    const listSql = `SELECT visitor_id, timestamp, store_id, store_name, gender, age, day_of_week, smile FROM public.visitors ${whereSql} ORDER BY timestamp DESC LIMIT ${params.length+1} OFFSET ${params.length+2}`;
-    const listParams = [...params, ps, offset];
-    const { rows } = await pool.query(listSql, listParams);
+    params.push(ps);
+    params.push(offset);
+    const listSql = `SELECT visitor_id, timestamp, store_id, store_name, gender, age, day_of_week, smile FROM public.visitors ${whereSql} ORDER BY timestamp DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+    const { rows } = await pool.query(listSql, params);
     return res.json({ items: rows, total, page: p, pageSize: ps });
   } catch (e) {
     return res.status(500).json({ error: String(e.message || e) });

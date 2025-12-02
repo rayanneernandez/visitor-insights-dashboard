@@ -1,6 +1,8 @@
 import type { VisitorStats, VisitorsPage } from "@/types/api";
 
-const BACKEND_URL = "http://localhost:3001/api";
+// Use environment variable or default to relative path (for production) or localhost (for dev)
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
+  (import.meta.env.DEV ? "http://localhost:3001/api" : "/api");
 
 export async function fetchVisitorStats(deviceId?: string, start?: string, end?: string): Promise<VisitorStats> {
   const params = new URLSearchParams();

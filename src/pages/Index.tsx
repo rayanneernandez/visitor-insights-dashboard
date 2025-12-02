@@ -7,12 +7,11 @@ import { DashboardFilters } from "@/components/DashboardFilters";
 import { StatCard } from "@/components/StatCard";
 import { ChatAssistant } from "@/components/ChatAssistant";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/use-toast";
 
-
-import { fetchDevices, fetchVisitors } from "@/services/api";
-import { Device, Visitor } from "@/types/api";
-import { calculateStats } from "@/utils/statsCalculator";
+import { fetchDevices } from "@/services/api";
+import { Device, VisitorStats } from "@/types/api";
 import backend from "@/services/backend";
 import {
   BarChart,
@@ -83,44 +82,26 @@ const Index = () => {
     queryFn: fetchDevices,
   });
 
-  const { data: visitors = [], isLoading, error: visitorsError } = useQuery<Visitor[]>({
-    queryKey: ["visitors", appliedFilters.device, appliedFilters.start, appliedFilters.end],
-    queryFn: () =>
-      fetchVisitors(
-        appliedFilters.device === "all" ? undefined : appliedFilters.device,
-        appliedFilters.start,
-        appliedFilters.end
-      ),
-  });
-
-  const { data: backendStats, isLoading: isBackendLoading, error: backendError } = useQuery({
-    queryKey: ["backendStats", appliedFilters.device, appliedFilters.start, appliedFilters.end],
+  // Busca dados direto do banco via backend (cache)
+  const { data: stats, isLoading, error: statsError } = useQuery<VisitorStats>({
+    queryKey: ["stats", appliedFilters.device, appliedFilters.start, appliedFilters.end],
     queryFn: () =>
       backend.fetchVisitorStats(
         appliedFilters.device === "all" ? undefined : appliedFilters.device,
         appliedFilters.start,
         appliedFilters.end
       ),
+    staleTime: 60 * 1000, // 1 minuto
+    refetchInterval: 5 * 60 * 1000, // Atualiza a cada 5 minutos
   });
-
-  const stats = backendStats && backendStats.total > 0 ? backendStats : calculateStats(visitors);
 
   useEffect(() => {
     if (devicesError) toast({ title: "Erro ao buscar lojas", description: String(devicesError) });
   }, [devicesError]);
 
   useEffect(() => {
-    if (visitorsError) toast({ title: "Erro ao buscar visitantes", description: String(visitorsError) });
-  }, [visitorsError]);
-
-  useEffect(() => {
-    if (backendError) {
-      const msg = String(backendError);
-      if (!/Failed to fetch/i.test(msg)) {
-        toast({ title: "Erro ao buscar stats do backend", description: msg });
-      }
-    }
-  }, [backendError]);
+    if (statsError) toast({ title: "Erro ao carregar dados", description: String(statsError), variant: "destructive" });
+  }, [statsError]);
 
   const handleApplyFilters = () => {
     setAppliedFilters({
@@ -138,28 +119,28 @@ const Index = () => {
   const dayOrder = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
   const dayOfWeekData = dayOrder.map((day) => ({
     day,
-    visitantes: stats.byDayOfWeek[day] || 0,
+    visitantes: stats?.byDayOfWeek[day] || 0,
   }));
 
   const genderData = [
-    { name: "Masculino", value: stats.men, color: "#e73c3cff" },
-    { name: "Feminino", value: stats.women, color: "#e8e419ff" },
+    { name: "Masculino", value: stats?.men || 0, color: "#e73c3cff" },
+    { name: "Feminino", value: stats?.women || 0, color: "#e8e419ff" },
   ];
 
-  const ageGroupData = Object.entries(stats.byAgeGroup).map(([group, count]) => ({
+  const ageGroupData = Object.entries(stats?.byAgeGroup || {}).map(([group, count]) => ({
     faixa: group,
     visitantes: count,
   }));
 
   const hourlyData = Array.from({ length: 24 }, (_, i) => ({
     hora: i,
-    visitantes: stats.byHour[i] || 0,
+    visitantes: stats?.byHour?.[i] || 0,
   }));
 
   const genderHourlyData = Array.from({ length: 24 }, (_, i) => ({
     hora: i,
-    masculino: stats.byGenderHour.male[i] || 0,
-    feminino: stats.byGenderHour.female[i] || 0,
+    masculino: stats?.byGenderHour?.male?.[i] || 0,
+    feminino: stats?.byGenderHour?.female?.[i] || 0,
   }));
 
   return (
@@ -181,33 +162,43 @@ const Index = () => {
             onApplyFilters={handleApplyFilters}
           />
 
-          {(isBackendLoading && isLoading) ? (
-            <div className="text-center py-12">Carregando dados...</div>
+          {isLoading ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-32 rounded-xl" />
+                ))}
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Skeleton className="h-[350px] rounded-xl" />
+                <Skeleton className="h-[350px] rounded-xl" />
+              </div>
+            </div>
           ) : (
             <>
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 <StatCard
                   title="Total de Visitantes"
-                  value={stats.total}
+                  value={stats?.total || 0}
                   icon={Users}
                   colorClass="bg-stat-visitors"
                 />
                 <StatCard
                   title="Total de Homens"
-                  value={stats.men}
+                  value={stats?.men || 0}
                   icon={IconMale}
                   colorClass="bg-stat-men"
                 />
                 <StatCard
                   title="Total de Mulheres"
-                  value={stats.women}
+                  value={stats?.women || 0}
                   icon={IconFemale}
                   colorClass="bg-stat-women"
                 />
                 <StatCard
                   title="Média de Idade"
-                  value={`${stats.averageAge} anos`}
+                  value={`${stats?.averageAge || 0} anos`}
                   icon={CalendarIcon}
                   colorClass="bg-stat-age"
                 />
@@ -327,7 +318,7 @@ const Index = () => {
                     />
                   </LineChart>
                 </ResponsiveContainer>
-                {stats.total === 0 && (
+                {(stats?.total || 0) === 0 && (
                   <p className="text-center text-muted-foreground mt-4">
                     Nenhum dado disponível para o período selecionado
                   </p>
@@ -338,7 +329,7 @@ const Index = () => {
         </main>
       </div>
       
-      <ChatAssistant visitors={visitors} devices={devices} stats={stats} />
+      <ChatAssistant visitors={[]} devices={devices} stats={stats || { total: 0, men: 0, women: 0, averageAge: 0, byDayOfWeek: {}, byAgeGroup: {}, byHour: {}, byGenderHour: { male: {}, female: {} } }} />
     </div>
   );
 };

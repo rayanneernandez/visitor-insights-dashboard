@@ -284,7 +284,7 @@ const Index = () => {
                       />
                     </LineChart>
                   </ResponsiveContainer>
-                  {stats.total === 0 && (
+                  {(stats?.total || 0) === 0 && (
                     <p className="text-center text-muted-foreground mt-4">
                       Nenhum dado disponível para o período selecionado
                     </p>
